@@ -62,10 +62,10 @@ def main():
             quality = "1080"
 
             # yt-dlp Format-String mit der gewählten Auflösung
-            video_format = f"bestvideo[height<={quality}]+bestaudio/best"
+        video_format = f"bestvideo[height<={quality}]+bestaudio/best"
 
             # Befehl für yt-dlp anpassen
-            command.extend(["-f", video_format, "--merge-output-format", "mp4"])
+        command.extend(["-f", video_format, "--merge-output-format", "mp4"])
 
     elif format_choice == "mp3":
         command.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "mp3"])
