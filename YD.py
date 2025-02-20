@@ -67,7 +67,7 @@ def main():
             # Befehl für yt-dlp anpassen
         command.extend([
         "-f", video_format, "--merge-output-format", "mp4",
-        "--throttled-rate", "5M",
+        "--throttled-rate", "1M",
         "--http-chunk-size", "10M",
         "--force-ipv4",
         "--geo-bypass"
