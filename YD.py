@@ -65,7 +65,14 @@ def main():
         video_format = f"bestvideo[height<={quality}]+bestaudio/best"
 
             # Befehl für yt-dlp anpassen
-        command.extend(["-f", video_format, "--merge-output-format", "mp4"])
+        command.extend([
+        "-f", video_format, "--merge-output-format", "mp4",
+        "--throttled-rate", "5M",
+        "--http-chunk-size", "10M",
+        "--force-ipv4",
+        "--geo-bypass"
+        ])
+
 
     elif format_choice == "mp3":
         command.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "mp3"])
