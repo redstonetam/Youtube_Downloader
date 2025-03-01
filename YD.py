@@ -61,17 +61,17 @@ def main():
         if not quality.isdigit():
             quality = "1080"
 
-            # yt-dlp Format-String mit der gewählten Auflösung
-        video_format = f"bestvideo[height<={quality}]+bestaudio/best"
+           # Hier wurde die Zeile angepasst, um AAC anstelle von Opus zu erzwingen
+        video_format = f"bestvideo[height<={quality}]+bestaudio[ext=m4a]/best"
 
-            # Befehl für yt-dlp anpassen
         command.extend([
-        "-f", video_format, "--merge-output-format", "mp4",
-        "--throttled-rate", "1M",
-        "--http-chunk-size", "10M",
-        "--force-ipv4",
-        "--geo-bypass"
+            "-f", video_format, "--merge-output-format", "mp4",
+            "--throttled-rate", "1M",
+            "--http-chunk-size", "10M",
+            "--force-ipv4",
+            "--geo-bypass"
         ])
+
 
 
     elif format_choice == "mp3":
