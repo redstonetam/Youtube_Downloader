@@ -12,8 +12,7 @@ def choose_folder():
 def update_progress(process):
     for line in process.stdout:
         if "ETA" in line or "%" in line:
-            status_label.config(text=line.strip())
-    status_label.config(text="Download abgeschlossen!")
+            print(line.strip())
     messagebox.showinfo("Erfolg", f"Download abgeschlossen! Dateien gespeichert in: {output_var.get()}")
 
 def download_video():
@@ -51,15 +50,12 @@ def download_video():
         "mp4": f"bestvideo[height<={quality}]+bestaudio[ext=m4a]/best",
         "mp3": "bestaudio --extract-audio --audio-format mp3",
         "wav": "bestaudio --extract-audio --audio-format wav",
-        "flac": "bestaudio --extract-audio --audio-format flac",
         "webm": f"bestvideo[height<={quality}]+bestaudio[ext=webm]/best",
         "mov": f"bestvideo[height<={quality}]+bestaudio[ext=m4a]/best --recode-video mov"
     }
     
     if format_choice in format_options:
         command.extend(["-f", format_options[format_choice]])
-        if format_choice == "mov":
-            command.append("--recode-video"); command.append("mov")
     else:
         messagebox.showerror("Fehler", "Ungültiges Format ausgewählt.")
         return
@@ -75,7 +71,7 @@ def download_video():
 # GUI erstellen
 root = tk.Tk()
 root.title("YouTube Downloader")
-root.geometry("400x400")
+root.geometry("400x300")
 
 # URL-Eingabe
 url_label = tk.Label(root, text="YouTube-URL oder Playlist-URL:")
@@ -87,7 +83,7 @@ url_entry.pack()
 format_label = tk.Label(root, text="Format wählen:")
 format_label.pack()
 format_var = tk.StringVar(value="mp4")
-format_dropdown = ttk.Combobox(root, textvariable=format_var, values=["mp4", "mp3", "wav", "flac", "webm", "mov"])
+format_dropdown = ttk.Combobox(root, textvariable=format_var, values=["mp4", "mp3", "wav", "webm", "mov"])
 format_dropdown.pack()
 
 # Qualität-Auswahl
@@ -113,11 +109,7 @@ proxy_entry = tk.Entry(root, width=50)
 proxy_entry.pack()
 
 # Download-Button
-download_button = tk.Button(root, text="Download starten", command=download_video)
+download_button = tk.Button(root, text="Download starten", command=lambda: threading.Thread(target=download_video).start())
 download_button.pack()
-
-# Status-Anzeige
-status_label = tk.Label(root, text="")
-status_label.pack()
 
 root.mainloop()
