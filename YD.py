@@ -58,6 +58,8 @@ def download_video():
     
     if format_choice in format_options:
         command.extend(["-f", format_options[format_choice]])
+        if format_choice == "mov":
+            command.append("--recode-video"); command.append("mov")
     else:
         messagebox.showerror("Fehler", "Ungültiges Format ausgewählt.")
         return
