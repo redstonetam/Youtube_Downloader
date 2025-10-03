@@ -53,6 +53,43 @@ start_time = None
 elapsed_updater_id = None
 eta_text = ""
 
+# ---------------- Helpers ----------------
+def get_video_info(url, format_choice, quality_choice):
+    """Ask yt-dlp for estimated filesize"""
+    yt_dlp_path = resource_path("yt-dlp.exe")
+    if not os.path.exists(yt_dlp_path):
+        return "yt-dlp.exe not found"
+
+    # format string
+    if format_choice == "mp4":
+        fmt = f"bestvideo[height<={quality_choice}]+bestaudio[ext=m4a]/best"
+    elif format_choice == "mp3":
+        fmt = "bestaudio"
+    elif format_choice == "wav":
+        fmt = "bestaudio"
+    elif format_choice == "webm":
+        fmt = f"bestvideo[height<={quality_choice}]+bestaudio[ext=webm]/best"
+    elif format_choice == "mov":
+        fmt = f"bestvideo[height<={quality_choice}]+bestaudio[ext=m4a]/best"
+    else:
+        fmt = "best"
+
+    try:
+        result = subprocess.run(
+            [yt_dlp_path, "--no-warnings", "-f", fmt, "--print", "%(filesize_approx)s", url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        size_bytes = result.stdout.strip()
+        if size_bytes.isdigit():
+            size_mb = int(size_bytes) / (1024 * 1024)
+            return f"Estimated size: {size_mb:.2f} MB"
+        else:
+            return "Size not available"
+    except Exception as e:
+        return f"Error getting info: {e}"
+
 # ---------------- GUI Functions ----------------
 def choose_output_folder():
     folder = filedialog.askdirectory(initialdir=settings.get("default_output", DEFAULT_SETTINGS["default_output"]))
@@ -207,6 +244,10 @@ def download_toggle():
     if not url:
         messagebox.showerror("Error", "Please enter a valid YouTube URL or playlist.")
         return
+
+    # Get estimated size first
+    info_text = get_video_info(url, format_var.get(), quality_var.get())
+    messagebox.showinfo("Video Info", info_text)
 
     outdir = output_var.get() or settings["default_output"]
     os.makedirs(outdir, exist_ok=True)
