@@ -3,7 +3,7 @@
 
 A simple YouTube Downloader with a modern GUI built using **Python + ttkbootstrap**.  
 It uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [ffmpeg](https://ffmpeg.org/) to download and process videos.
-
+Most of the code by chatgpt
 ---
 
 ## Features
