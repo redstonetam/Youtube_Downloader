@@ -307,44 +307,44 @@ def download_toggle():
     threading.Thread(target=start_download_thread, args=(command,), daemon=True).start()
 
 # ---------------- GUI ----------------
-root = tb.Window(themename=settings.get("theme","cosmo"))
+root = tb.Window(themename=settings.get("theme", "cosmo"))
 root.title("YouTube Downloader")
 root.geometry("550x610")
 
 top_frame = tb.Frame(root)
-top_frame.pack(fill="x", pady=(8,0), padx=10)
+top_frame.pack(fill="x", pady=(8, 0), padx=10)
 tb.Label(top_frame, text="YouTube Downloader", font=("TkDefaultFont", 14, "bold")).pack(side="left")
 tb.Button(top_frame, text="⚙️ Settings", bootstyle="light", command=open_settings).pack(side="right")
 
-tb.Label(root, text="YouTube URL or Playlist URL:").pack(pady=(12,4))
+tb.Label(root, text="YouTube URL or Playlist URL:").pack(pady=(12, 4))
 url_entry = tb.Entry(root, width=60)
 url_entry.pack()
 
-tb.Label(root, text="Format:").pack(pady=(10,4))
+tb.Label(root, text="Format:").pack(pady=(10, 4))
 format_var = tk.StringVar(value="mp4")
-tb.Combobox(root, textvariable=format_var, values=["mp4","mp3","wav","webm","mov"], width=20).pack()
+tb.Combobox(root, textvariable=format_var, values=["mp4", "mp3", "wav", "webm", "mov"], width=20).pack()
 
-tb.Label(root, text="Quality:").pack(pady=(10,4))
+tb.Label(root, text="Quality:").pack(pady=(10, 4))
 quality_var = tk.StringVar(value="1080")
-tb.Combobox(root, textvariable=quality_var, values=["144","240","360","480","720","1080","1440","2160"], width=20).pack()
+tb.Combobox(root, textvariable=quality_var, values=["144", "240", "360", "480", "720", "1080", "1440", "2160"], width=20).pack()
 
-tb.Label(root, text="Output folder:").pack(pady=(10,4))
+tb.Label(root, text="Output folder:").pack(pady=(10, 4))
 output_var = tk.StringVar(value=settings.get("default_output", DEFAULT_SETTINGS["default_output"]))
 tb.Entry(root, width=60, textvariable=output_var, state="readonly").pack()
-tb.Button(root, text="Choose folder", bootstyle="info", command=choose_output_folder).pack(pady=(6,8))
+tb.Button(root, text="Choose folder", bootstyle="info", command=choose_output_folder).pack(pady=(6, 8))
 
 download_toggle_button = tb.Button(root, text="Start Download", bootstyle="success", width=20, command=download_toggle)
-download_toggle_button.pack(pady=(6,6))
+download_toggle_button.pack(pady=(6, 6))
 
 progress_label = tb.Label(root, text="No download yet")
-progress_label.pack(pady=(6,4))
+progress_label.pack(pady=(6, 4))
 progress_bar = tb.Progressbar(root, length=460, mode="determinate", bootstyle="success-striped")
 progress_bar.pack()
 
 elapsed_label = tb.Label(root, text="Elapsed: 00:00:00")
-elapsed_label.pack(pady=(6,2))
+elapsed_label.pack(pady=(6, 2))
 eta_label = tb.Label(root, text="Remaining: --:--")
-eta_label.pack(pady=(0,6))
+eta_label.pack(pady=(0, 6))
 
 status_box = tk.Text(root, height=12, width=70)
 status_box.pack(pady=10)
@@ -360,6 +360,6 @@ extract_audio_var = tk.IntVar(value=1 if settings["extract_audio"] else 0)
 def on_close():
     stop_current_process()
     root.destroy()
-root.protocol("WM_DELETE_WINDOW", on_close)
 
+root.protocol("WM_DELETE_WINDOW", on_close)
 root.mainloop()
