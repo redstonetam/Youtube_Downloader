@@ -1,4 +1,3 @@
-# YD.py — YouTube Downloader (yt-dlp + ffmpeg) with Pause/Resume
 import os
 import json
 import threading
