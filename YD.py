@@ -1,21 +1,21 @@
+# YD.py — YouTube Downloader (yt-dlp + ffmpeg) with Pause/Resume
 import os
-import sys
-import subprocess
+import json
 import threading
 import time
-import json
+import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import ttkbootstrap as tb
+from ttkbootstrap import ttk
 from ttkbootstrap.constants import *
 
 # ---------------- Resource & Settings ----------------
 def resource_path(relative_path):
-    """Locate resources inside 'Necessary' folder"""
     base = os.path.abspath(os.path.dirname(__file__))
     return os.path.join(base, "Necessary", relative_path)
 
-SETTINGS_FILE = resource_path("settings.json")
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 DEFAULT_SETTINGS = {
     "default_output": os.path.join(os.path.expanduser("~"), "Downloads"),
     "use_proxy": False,
@@ -23,7 +23,7 @@ DEFAULT_SETTINGS = {
     "remux_mp4": True,
     "recode_mp4": False,
     "extract_audio": False,
-    "theme": "cosmo",  # default light
+    "theme": "cosmo",
 }
 
 def load_settings():
@@ -49,23 +49,21 @@ settings = load_settings()
 current_process = None
 process_lock = threading.Lock()
 stop_requested = False
+paused = False
+last_command = None
 start_time = None
 elapsed_updater_id = None
 eta_text = ""
 
 # ---------------- Helpers ----------------
 def get_video_info(url, format_choice, quality_choice):
-    """Ask yt-dlp for estimated filesize"""
     yt_dlp_path = resource_path("yt-dlp.exe")
     if not os.path.exists(yt_dlp_path):
         return "yt-dlp.exe not found"
 
-    # format string
     if format_choice == "mp4":
         fmt = f"bestvideo[height<={quality_choice}]+bestaudio[ext=m4a]/best"
-    elif format_choice == "mp3":
-        fmt = "bestaudio"
-    elif format_choice == "wav":
+    elif format_choice in ("mp3", "wav"):
         fmt = "bestaudio"
     elif format_choice == "webm":
         fmt = f"bestvideo[height<={quality_choice}]+bestaudio[ext=webm]/best"
@@ -77,9 +75,7 @@ def get_video_info(url, format_choice, quality_choice):
     try:
         result = subprocess.run(
             [yt_dlp_path, "--no-warnings", "-f", fmt, "--print", "%(filesize_approx)s", url],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=15
         )
         size_bytes = result.stdout.strip()
         if size_bytes.isdigit():
@@ -87,6 +83,8 @@ def get_video_info(url, format_choice, quality_choice):
             return f"Estimated size: {size_mb:.2f} MB"
         else:
             return "Size not available"
+    except subprocess.TimeoutExpired:
+        return "Unable to fetch size (timeout)"
     except Exception as e:
         return f"Error getting info: {e}"
 
@@ -106,43 +104,38 @@ def choose_default_folder():
 def open_settings():
     settings_win = tb.Toplevel(root)
     settings_win.title("Settings")
-    settings_win.geometry("520x400")
+    settings_win.geometry("520x500")
     settings_win.transient(root)
 
-    # Default folder
-    tb.Label(settings_win, text="Default output folder:").pack(anchor="w", padx=10, pady=(12,0))
-    df_frame = tb.Frame(settings_win)
+    ttk.Label(settings_win, text="Default output folder:").pack(anchor="w", padx=10, pady=(12,0))
+    df_frame = ttk.Frame(settings_win)
     df_frame.pack(fill="x", padx=10)
-    default_folder_entry = tb.Entry(df_frame, width=50, textvariable=default_folder_var, state="readonly")
+    default_folder_entry = ttk.Entry(df_frame, width=50, textvariable=default_folder_var, state="readonly")
     default_folder_entry.pack(side="left", padx=(0,8))
-    tb.Button(df_frame, text="Change", bootstyle="info", command=choose_default_folder).pack(side="left")
+    ttk.Button(df_frame, text="Change", bootstyle="info", command=choose_default_folder).pack(side="left")
 
-    tb.Separator(settings_win).pack(fill="x", pady=8, padx=10)
+    ttk.Separator(settings_win).pack(fill="x", pady=8, padx=10)
 
-    # Proxy
-    proxy_frame = tb.Frame(settings_win)
+    proxy_frame = ttk.Frame(settings_win)
     proxy_frame.pack(fill="x", padx=10)
-    tb.Checkbutton(proxy_frame, text="Use proxy", variable=use_proxy_var, bootstyle="round-toggle").pack(anchor="w")
-    tb.Label(proxy_frame, text="Proxy (http://user:pass@host:port):").pack(anchor="w", pady=(6,0))
-    tb.Entry(proxy_frame, width=60, textvariable=proxy_var).pack(anchor="w", pady=(0,6))
+    ttk.Checkbutton(proxy_frame, text="Use proxy", variable=use_proxy_var, bootstyle="round-toggle").pack(anchor="w")
+    ttk.Label(proxy_frame, text="Proxy (http://user:pass@host:port):").pack(anchor="w", pady=(6,0))
+    ttk.Entry(proxy_frame, width=60, textvariable=proxy_var).pack(anchor="w", pady=(0,6))
 
-    tb.Separator(settings_win).pack(fill="x", pady=8, padx=10)
+    ttk.Separator(settings_win).pack(fill="x", pady=8, padx=10)
 
-    # Video settings
-    tb.Label(settings_win, text="Video options:").pack(anchor="w", padx=10)
-    tb.Checkbutton(settings_win, text="Auto remux to MP4 (fast, no re-encode)", variable=remux_var, bootstyle="round-toggle").pack(anchor="w", padx=20)
-    tb.Checkbutton(settings_win, text="If remux fails: re-encode to MP4 (slow)", variable=recode_var, bootstyle="round-toggle").pack(anchor="w", padx=20, pady=(4,0))
+    ttk.Label(settings_win, text="Video options:").pack(anchor="w", padx=10)
+    ttk.Checkbutton(settings_win, text="Auto remux to MP4 (fast, no re-encode)", variable=remux_var, bootstyle="round-toggle").pack(anchor="w", padx=20)
+    ttk.Checkbutton(settings_win, text="If remux fails: re-encode to MP4 (slow)", variable=recode_var, bootstyle="round-toggle").pack(anchor="w", padx=20, pady=(4,0))
 
-    tb.Separator(settings_win).pack(fill="x", pady=8, padx=10)
+    ttk.Separator(settings_win).pack(fill="x", pady=8, padx=10)
 
-    # Audio
-    tb.Checkbutton(settings_win, text="Extract audio when MP3/WAV", variable=extract_audio_var, bootstyle="round-toggle").pack(anchor="w", padx=10)
+    ttk.Checkbutton(settings_win, text="Extract audio when MP3/WAV", variable=extract_audio_var, bootstyle="round-toggle").pack(anchor="w", padx=10)
 
-    tb.Separator(settings_win).pack(fill="x", pady=8, padx=10)
+    ttk.Separator(settings_win).pack(fill="x", pady=8, padx=10)
 
-    # Theme
-    tb.Label(settings_win, text="Theme:").pack(anchor="w", padx=10)
-    theme_combo = tb.Combobox(settings_win, values=["cosmo","flatly","darkly","cyborg","superhero","journal"], width=20)
+    ttk.Label(settings_win, text="Theme:").pack(anchor="w", padx=10)
+    theme_combo = ttk.Combobox(settings_win, values=["cosmo","flatly","darkly","cyborg","superhero","journal"], width=20)
     theme_combo.set(settings.get("theme", "cosmo"))
     theme_combo.pack(anchor="w", padx=20, pady=(0,8))
 
@@ -156,47 +149,58 @@ def open_settings():
         settings["theme"] = theme_combo.get()
         save_settings(settings)
         settings_win.destroy()
-        root.style.theme_use(settings["theme"])
+        # apply theme
+        try:
+            root.style.theme_use(settings["theme"])
+        except Exception:
+            pass
 
-    tb.Button(settings_win, text="Save", bootstyle="primary", command=save_and_close).pack(side="right", padx=12, pady=12)
-    tb.Button(settings_win, text="Cancel", bootstyle="light", command=settings_win.destroy).pack(side="right", pady=12)
+    ttk.Button(settings_win, text="Save", bootstyle="primary", command=save_and_close).pack(side="right", padx=12, pady=12)
+    ttk.Button(settings_win, text="Cancel", bootstyle="light", command=settings_win.destroy).pack(side="right", pady=12)
 
+# ---------------- Process / Download handling ----------------
 def update_progress_reader(process):
     global current_process, stop_requested, eta_text
     try:
         for line in process.stdout:
             if stop_requested:
                 break
-            line = line.strip()
-            if line:
-                # Progress %
-                if "%" in line:
-                    parts = line.split()
-                    for p in parts:
-                        if "%" in p:
-                            try:
-                                val = float(p.replace("%","").replace(",",".")) 
-                                root.after(0, lambda v=val: progress_bar.configure(value=v))
-                                root.after(0, lambda v=val: progress_label.configure(text=f"Progress: {v:.1f}%"))
-                            except:
-                                pass
-                # ETA
-                if "ETA" in line:
-                    for i,p in enumerate(line.split()):
-                        if p == "ETA" and i+1 < len(line.split()):
-                            eta_text = line.split()[i+1]
-                            root.after(0, lambda: eta_label.configure(text=f"Remaining: {eta_text}"))
-                # Console output
-                root.after(0, lambda l=line: (status_box.insert(tk.END, l + "\n"), status_box.see(tk.END)))
+            line = line.rstrip()
+            if not line:
+                continue
 
-        if not stop_requested:
+            # show console output in UI
+            root.after(0, lambda l=line: (status_box.insert(tk.END, l + "\n"), status_box.see(tk.END)))
+
+            # progress %
+            if "%" in line:
+                parts = line.split()
+                for p in parts:
+                    if "%" in p:
+                        try:
+                            val = float(p.replace("%","").replace(",","").replace("%",""))
+                            root.after(0, lambda v=val: progress_bar.configure(value=v))
+                            root.after(0, lambda v=val: progress_label.configure(text=f"Progress: {v:.1f}%"))
+                        except Exception:
+                            pass
+
+            # ETA
+            if "ETA" in line:
+                tokens = line.split()
+                for i,tok in enumerate(tokens):
+                    if tok == "ETA" and i+1 < len(tokens):
+                        eta_text = tokens[i+1]
+                        root.after(0, lambda: eta_label.configure(text=f"Remaining: {eta_text}"))
+
+        # finished normally (if not paused)
+        if not stop_requested and not paused:
             root.after(0, lambda: progress_bar.configure(value=100))
             root.after(0, lambda: progress_label.configure(text="Download finished ✅"))
             root.after(0, lambda: messagebox.showinfo("Success", f"Download finished! Saved to: {output_var.get()}"))
     finally:
         with process_lock:
             current_process = None
-        root.after(0, lambda: download_toggle_button.configure(text="Start Download", bootstyle="success"))
+        root.after(0, lambda: pause_resume_button.configure(text="Start Download", bootstyle="success"))
         root.after(0, lambda: eta_label.configure(text="Remaining: --:--"))
 
 def start_download_thread(command):
@@ -210,7 +214,7 @@ def start_download_thread(command):
     except Exception as e:
         messagebox.showerror("Error", f"Failed to start: {e}")
 
-def stop_current_process():
+def stop_current_process(kill=False):
     global current_process, stop_requested
     stop_requested = True
     with process_lock:
@@ -219,134 +223,216 @@ def stop_current_process():
         try:
             proc.terminate()
             time.sleep(0.5)
-            if proc.poll() is None:
+            if proc.poll() is None and kill:
                 proc.kill()
-        except:
+        except Exception:
             pass
     with process_lock:
         current_process = None
 
-def download_toggle():
-    global start_time, elapsed_updater_id, stop_requested
-    with process_lock:
-        running = current_process is not None
-    if running:
+# ---------------- Pause / Resume / Cancel logic ----------------
+def pause_or_resume():
+    """
+    Button state machine:
+    - "Start Download": start anew
+    - "Pause": terminate running process but keep last_command for resume
+    - "Resume": start process again using last_command (if available)
+    """
+    global paused, stop_requested, last_command, start_time, elapsed_updater_id
+
+    state = pause_resume_button.cget("text")
+
+    # If currently running -> Pause
+    if state == "Pause":
+        if current_process:
+            stop_requested = True
+            # do not destroy last_command; we intend to resume
+            stop_current_process(kill=False)
+            paused = True
+            pause_resume_button.configure(text="Resume", bootstyle="warning")
+            progress_label.configure(text="Paused")
+            # stop elapsed timer but keep elapsed value
+            if elapsed_updater_id:
+                root.after_cancel(elapsed_updater_id)
+        return
+
+    # If currently paused -> Resume
+    if state == "Resume":
+        if last_command:
+            stop_requested = False
+            paused = False
+            pause_resume_button.configure(text="Pause", bootstyle="danger-outline")
+            progress_label.configure(text="Resuming...")
+            # restart elapsed timer
+            if start_time is None:
+                start_time = time.time()
+            def update_elapsed():
+                global elapsed_updater_id
+                if start_time and not stop_requested and not paused:
+                    elapsed = int(time.time() - start_time)
+                    mins, secs = divmod(elapsed, 60)
+                    hours, mins = divmod(mins, 60)
+                    elapsed_label.configure(text=f"Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
+                    elapsed_updater_id = root.after(500, update_elapsed)
+                else:
+                    elapsed_label.configure(text="Elapsed: 00:00:00")
+            update_elapsed()
+            threading.Thread(target=start_download_thread, args=(last_command,), daemon=True).start()
+        else:
+            messagebox.showwarning("Resume", "No previous download command to resume.")
+        return
+
+    # If starting from idle -> Start Download
+    if state in ("Start Download", "Start"):
+        url = url_entry.get().strip()
+        if not url:
+            messagebox.showerror("Error", "Please enter a valid YouTube URL or playlist.")
+            return
+
+        # check executables
+        yt_dlp_path = resource_path("yt-dlp.exe")
+        ffmpeg_path = resource_path("ffmpeg.exe")
+        if not os.path.exists(yt_dlp_path) or not os.path.exists(ffmpeg_path):
+            messagebox.showerror("Error", "yt-dlp.exe or ffmpeg.exe not found in 'Necessary' folder.")
+            return
+
+        # Get info (nice to show)
+        info_text = get_video_info(url, format_var.get(), quality_var.get())
+        messagebox.showinfo("Video Info", info_text)
+
+        outdir = output_var.get() or settings["default_output"]
+        os.makedirs(outdir, exist_ok=True)
+
+        command = build_command(url, outdir)
+
+        # record last_command for resume
+        last_command = command.copy()
+
+        # reset UI and start
+        progress_bar.configure(value=0, maximum=100, mode="determinate")
+        progress_label.configure(text="Starting...")
+        status_box.delete(1.0, tk.END)
+        pause_resume_button.configure(text="Pause", bootstyle="danger-outline")
+        cancel_button.configure(state="normal")
+        start_time = time.time()
+        stop_requested = False
+        paused = False
+
+        # start elapsed updater
+        def update_elapsed():
+            global elapsed_updater_id
+            if start_time and not stop_requested and not paused:
+                elapsed = int(time.time() - start_time)
+                mins, secs = divmod(elapsed, 60)
+                hours, mins = divmod(mins, 60)
+                elapsed_label.configure(text=f"Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
+                elapsed_updater_id = root.after(500, update_elapsed)
+            else:
+                elapsed_label.configure(text="Elapsed: 00:00:00")
+        update_elapsed()
+
+        threading.Thread(target=start_download_thread, args=(command,), daemon=True).start()
+        return
+
+def cancel_download():
+    """
+    Cancel: kill process and clear last_command (so Resume won't work).
+    """
+    global paused, last_command, stop_requested, start_time
+    if current_process:
         stop_requested = True
-        stop_current_process()
-        progress_label.configure(text="Cancelled")
-        download_toggle_button.configure(text="Start Download", bootstyle="success")
+        stop_current_process(kill=True)
+    paused = False
+    last_command = None
+    pause_resume_button.configure(text="Start Download", bootstyle="success")
+    cancel_button.configure(state="disabled")
+    progress_label.configure(text="Cancelled")
+    try:
         if elapsed_updater_id:
             root.after_cancel(elapsed_updater_id)
-        return
+    except Exception:
+        pass
+    start_time = None
 
-    # Start new
-    url = url_entry.get().strip()
-    if not url:
-        messagebox.showerror("Error", "Please enter a valid YouTube URL or playlist.")
-        return
-
-    # Get estimated size first
-    info_text = get_video_info(url, format_var.get(), quality_var.get())
-    messagebox.showinfo("Video Info", info_text)
-
-    outdir = output_var.get() or settings["default_output"]
-    os.makedirs(outdir, exist_ok=True)
-
+# ---------------- Command builder ----------------
+def build_command(url, outdir):
     yt_dlp_path = resource_path("yt-dlp.exe")
     ffmpeg_path = resource_path("ffmpeg.exe")
-    if not os.path.exists(yt_dlp_path) or not os.path.exists(ffmpeg_path):
-        messagebox.showerror("Error", "yt-dlp.exe or ffmpeg.exe not found in 'Necessary' folder.")
-        return
-
-    command = [yt_dlp_path, "--ffmpeg-location", ffmpeg_path,
-               "-o", os.path.join(outdir, "%(title)s.%(ext)s"), "--progress"]
+    cmd = [yt_dlp_path, "--ffmpeg-location", ffmpeg_path, "-o", os.path.join(outdir, "%(title)s.%(ext)s"), "--progress"]
 
     if use_proxy_var.get():
         proxy_value = proxy_var.get().strip()
         if proxy_value:
-            command.extend(["--proxy", proxy_value])
+            cmd.extend(["--proxy", proxy_value])
 
-    if format_var.get() == "mp4":
+    fmt = format_var.get()
+    q = quality_var.get()
+
+    if fmt == "mp4":
         if remux_var.get():
-            command.extend(["-f", f"bestvideo[height<={quality_var.get()}]+bestaudio[ext=m4a]/best", "--remux-video", "mp4"])
+            cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best", "--remux-video", "mp4"])
         elif recode_var.get():
-            command.extend(["-f", f"bestvideo[height<={quality_var.get()}]+bestaudio[ext=m4a]/best", "--recode-video", "mp4"])
+            cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best", "--recode-video", "mp4"])
         else:
-            command.extend(["-f", f"bestvideo[height<={quality_var.get()}]+bestaudio[ext=m4a]/best"])
-    elif format_var.get() == "mp3":
-        command.extend(["-f","bestaudio","--extract-audio","--audio-format","mp3"])
-    elif format_var.get() == "wav":
-        command.extend(["-f","bestaudio","--extract-audio","--audio-format","wav"])
-    elif format_var.get() == "webm":
-        command.extend(["-f", f"bestvideo[height<={quality_var.get()}]+bestaudio[ext=webm]/best"])
-    elif format_var.get() == "mov":
-        command.extend(["-f", f"bestvideo[height<={quality_var.get()}]+bestaudio[ext=m4a]/best","--recode-video","mov"])
+            cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best"])
+    elif fmt == "mp3":
+        cmd.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "mp3"])
+    elif fmt == "wav":
+        cmd.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "wav"])
+    elif fmt == "webm":
+        cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=webm]/best"])
+    elif fmt == "mov":
+        cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best", "--recode-video", "mov"])
 
-    command.append(url)
-
-    progress_bar.configure(value=0)
-    progress_label.configure(text="Starting...")
-    status_box.delete(1.0, tk.END)
-    download_toggle_button.configure(text="Stop (cancel)", bootstyle="danger-outline")
-    stop_requested = False
-
-    # start elapsed updater
-    start_time = time.time()
-    def update_elapsed():
-        global elapsed_updater_id
-        if start_time and not stop_requested:
-            elapsed = int(time.time() - start_time)
-            mins, secs = divmod(elapsed, 60)
-            hours, mins = divmod(mins, 60)
-            elapsed_label.configure(text=f"Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
-            elapsed_updater_id = root.after(500, update_elapsed)
-        else:
-            elapsed_label.configure(text="Elapsed: 00:00:00")
-    update_elapsed()
-
-    threading.Thread(target=start_download_thread, args=(command,), daemon=True).start()
+    cmd.append(url)
+    return cmd
 
 # ---------------- GUI ----------------
 root = tb.Window(themename=settings.get("theme", "cosmo"))
 root.title("YouTube Downloader")
-root.geometry("550x610")
+root.geometry("640x720")
 
-top_frame = tb.Frame(root)
+top_frame = ttk.Frame(root)
 top_frame.pack(fill="x", pady=(8, 0), padx=10)
-tb.Label(top_frame, text="YouTube Downloader", font=("TkDefaultFont", 14, "bold")).pack(side="left")
-tb.Button(top_frame, text="⚙️ Settings", bootstyle="light", command=open_settings).pack(side="right")
+ttk.Label(top_frame, text="YouTube Downloader", font=("TkDefaultFont", 14, "bold")).pack(side="left")
+ttk.Button(top_frame, text="⚙️ Settings", bootstyle="light", command=open_settings).pack(side="right")
 
-tb.Label(root, text="YouTube URL or Playlist URL:").pack(pady=(12, 4))
-url_entry = tb.Entry(root, width=60)
+ttk.Label(root, text="YouTube URL or Playlist URL:").pack(pady=(12, 4))
+url_entry = ttk.Entry(root, width=70)
 url_entry.pack()
 
-tb.Label(root, text="Format:").pack(pady=(10, 4))
+ttk.Label(root, text="Format:").pack(pady=(10, 4))
 format_var = tk.StringVar(value="mp4")
-tb.Combobox(root, textvariable=format_var, values=["mp4", "mp3", "wav", "webm", "mov"], width=20).pack()
+ttk.Combobox(root, textvariable=format_var, values=["mp4", "mp3", "wav", "webm", "mov"], width=20).pack()
 
-tb.Label(root, text="Quality:").pack(pady=(10, 4))
+ttk.Label(root, text="Quality:").pack(pady=(10, 4))
 quality_var = tk.StringVar(value="1080")
-tb.Combobox(root, textvariable=quality_var, values=["144", "240", "360", "480", "720", "1080", "1440", "2160"], width=20).pack()
+ttk.Combobox(root, textvariable=quality_var, values=["144", "240", "360", "480", "720", "1080", "1440", "2160"], width=20).pack()
 
-tb.Label(root, text="Output folder:").pack(pady=(10, 4))
+ttk.Label(root, text="Output folder:").pack(pady=(10, 4))
 output_var = tk.StringVar(value=settings.get("default_output", DEFAULT_SETTINGS["default_output"]))
-tb.Entry(root, width=60, textvariable=output_var, state="readonly").pack()
-tb.Button(root, text="Choose folder", bootstyle="info", command=choose_output_folder).pack(pady=(6, 8))
+ttk.Entry(root, width=60, textvariable=output_var, state="readonly").pack()
+ttk.Button(root, text="Choose folder", bootstyle="info", command=choose_output_folder).pack(pady=(6, 8))
 
-download_toggle_button = tb.Button(root, text="Start Download", bootstyle="success", width=20, command=download_toggle)
-download_toggle_button.pack(pady=(6, 6))
+# Pause/Resume + Cancel buttons
+button_frame = ttk.Frame(root)
+button_frame.pack(pady=(6,6))
+pause_resume_button = ttk.Button(button_frame, text="Start Download", bootstyle="success", width=18, command=pause_or_resume)
+pause_resume_button.pack(side="left", padx=(0,8))
+cancel_button = ttk.Button(button_frame, text="Cancel", bootstyle="danger", width=12, command=cancel_download, state="disabled")
+cancel_button.pack(side="left")
 
-progress_label = tb.Label(root, text="No download yet")
+progress_label = ttk.Label(root, text="No download yet")
 progress_label.pack(pady=(6, 4))
-progress_bar = tb.Progressbar(root, length=460, mode="determinate", bootstyle="success-striped")
+progress_bar = ttk.Progressbar(root, length=560, mode="determinate", bootstyle="success-striped")
 progress_bar.pack()
 
-elapsed_label = tb.Label(root, text="Elapsed: 00:00:00")
+elapsed_label = ttk.Label(root, text="Elapsed: 00:00:00")
 elapsed_label.pack(pady=(6, 2))
-eta_label = tb.Label(root, text="Remaining: --:--")
+eta_label = ttk.Label(root, text="Remaining: --:--")
 eta_label.pack(pady=(0, 6))
 
-status_box = tk.Text(root, height=12, width=70)
+status_box = tk.Text(root, height=18, width=85)
 status_box.pack(pady=10)
 
 # Settings variables
@@ -358,7 +444,8 @@ recode_var = tk.IntVar(value=1 if settings["recode_mp4"] else 0)
 extract_audio_var = tk.IntVar(value=1 if settings["extract_audio"] else 0)
 
 def on_close():
-    stop_current_process()
+    # ensure we stop process cleanly
+    cancel_download()
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_close)
