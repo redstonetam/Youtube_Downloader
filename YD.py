@@ -13,18 +13,18 @@ from ttkbootstrap.constants import *
 # ---------------- Resource & Settings ----------------
 def resource_path(relative_path):
     """
-    Gibt den Pfad zur Ressource zurück.
-    Wenn das Script gebündelt ist (pyinstaller --onefile), benutzt es sys._MEIPASS.
-    Bei normaler Ausführung referenziert es den lokalen Ordner und den "Necessary"-Unterordner.
+    Return path to a bundled resource.
+    If script is bundled by pyinstaller (--onefile) use sys._MEIPASS.
+    Otherwise use the local folder and the 'Necessary' subfolder.
     """
     try:
-        base = sys._MEIPASS  # PyInstaller temp folder
+        base = sys._MEIPASS
     except Exception:
         base = os.path.abspath(os.path.dirname(__file__))
-    # Settings & executables liegen im Necessary-Ordner
+    # executables & settings live in the Necessary folder
     return os.path.join(base, "Necessary", relative_path)
 
-# SETTINGS_FILE liegt im Necessary-Ordner (wie gewünscht)
+# SETTINGS_FILE lives in the Necessary folder
 SETTINGS_FILE = resource_path("settings.json")
 DEFAULT_SETTINGS = {
     "default_output": os.path.join(os.path.expanduser("~"), "Downloads"),
@@ -37,6 +37,11 @@ DEFAULT_SETTINGS = {
 }
 
 def load_settings():
+    """
+    Load settings from SETTINGS_FILE if present.
+    Merge with DEFAULT_SETTINGS so new keys get defaults.
+    Returns a dict (copy on failure).
+    """
     try:
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
@@ -47,8 +52,12 @@ def load_settings():
     return DEFAULT_SETTINGS.copy()
 
 def save_settings(s):
+    """
+    Save provided settings dict to SETTINGS_FILE.
+    Ensures the Necessary folder exists before writing.
+    """
     try:
-        # Stelle sicher, dass Necessary-Ordner existiert (z. B. beim ersten Start)
+        # Ensure Necessary folder exists (e.g. first run)
         settings_dir = os.path.dirname(SETTINGS_FILE)
         os.makedirs(settings_dir, exist_ok=True)
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
@@ -59,6 +68,12 @@ def save_settings(s):
 settings = load_settings()
 
 # ---------------- Globals ----------------
+# current_process: subprocess running the download
+# process_lock: protect access to current_process
+# stop_requested: signal to stop current process (used for pause/cancel)
+# paused: whether UI is in paused state (resume will restart last_command)
+# last_command: saved command list to allow resume
+# start_time, elapsed_updater_id: track elapsed time updater scheduled with root.after
 current_process = None
 process_lock = threading.Lock()
 stop_requested = False
@@ -70,7 +85,10 @@ eta_text = ""
 
 # ---------------- Helpers ----------------
 def get_video_info(url, format_choice, quality_choice):
-    # Optional helper - jetzt nicht automatisch aufgerufen
+    """
+    Optional helper: return an estimated filesize using yt-dlp --print.
+    Not automatically called in the UI; used for quick size estimation only.
+    """
     yt_dlp_path = resource_path("yt-dlp.exe")
     if not os.path.exists(yt_dlp_path):
         return "yt-dlp.exe not found"
@@ -104,11 +122,13 @@ def get_video_info(url, format_choice, quality_choice):
 
 # ---------------- GUI Functions ----------------
 def choose_output_folder():
+    # Open folder picker and update the output_var if the user selects one
     folder = filedialog.askdirectory(initialdir=settings.get("default_output", DEFAULT_SETTINGS["default_output"]))
     if folder:
         output_var.set(folder)
 
 def choose_default_folder():
+    # Change the default download folder in persistent settings
     folder = filedialog.askdirectory(initialdir=settings.get("default_output", DEFAULT_SETTINGS["default_output"]))
     if folder:
         settings["default_output"] = folder
@@ -116,6 +136,7 @@ def choose_default_folder():
         default_folder_var.set(folder)
 
 def open_settings():
+    # Build settings window (modal-like) that allows the user to change persistent options
     settings_win = tb.Toplevel(root)
     settings_win.title("Settings")
     settings_win.geometry("520x500")
@@ -154,6 +175,7 @@ def open_settings():
     theme_combo.pack(anchor="w", padx=20, pady=(0,8))
 
     def save_and_close():
+        # Persist settings and apply chosen theme if possible
         settings["default_output"] = default_folder_var.get()
         settings["use_proxy"] = bool(use_proxy_var.get())
         settings["proxy"] = proxy_var.get().strip()
@@ -163,7 +185,7 @@ def open_settings():
         settings["theme"] = theme_combo.get()
         save_settings(settings)
         settings_win.destroy()
-        # apply theme
+        # apply theme (best-effort)
         try:
             root.style.theme_use(settings["theme"])
         except Exception:
@@ -174,6 +196,11 @@ def open_settings():
 
 # ---------------- Process / Download handling ----------------
 def update_progress_reader(process):
+    """
+    Read stdout lines from the running process and update the UI.
+    Extract percentage and ETA tokens when available and reflect them.
+    When the process finishes normally (not paused/stopped) mark progress as complete.
+    """
     global current_process, stop_requested, eta_text, elapsed_updater_id, start_time
     try:
         for line in process.stdout:
@@ -183,10 +210,10 @@ def update_progress_reader(process):
             if not line:
                 continue
 
-            # show console output in UI
+            # show console output in UI (thread-safe via root.after)
             root.after(0, lambda l=line: (status_box.insert(tk.END, l + "\n"), status_box.see(tk.END)))
 
-            # progress %
+            # attempt to find a percentage token in the line
             if "%" in line:
                 parts = line.split()
                 for p in parts:
@@ -198,7 +225,7 @@ def update_progress_reader(process):
                         except Exception:
                             pass
 
-            # ETA
+            # parse simple 'ETA' token patterns and show remaining time
             if "ETA" in line:
                 tokens = line.split()
                 for i,tok in enumerate(tokens):
@@ -206,17 +233,17 @@ def update_progress_reader(process):
                         eta_text = tokens[i+1]
                         root.after(0, lambda: eta_label.configure(text=f"Remaining: {eta_text}"))
 
-        # finished normally (if not paused)
+        # finished normally (if not paused/stopped) -> finalize UI
         if not stop_requested and not paused:
             root.after(0, lambda: progress_bar.configure(value=100))
             root.after(0, lambda: progress_label.configure(text="Download finished ✅"))
-            # Optional: kleine Info (kann entfernt werden, wenn gewünscht)
+            # show a small info dialog (best-effort)
             try:
                 root.after(0, lambda: messagebox.showinfo("Success", f"Download finished! Saved to: {output_var.get()}"))
             except Exception:
                 pass
 
-            # Stoppe Zeitmesser nach Abschluss
+            # Stop elapsed timer after completion
             if elapsed_updater_id:
                 try:
                     root.after_cancel(elapsed_updater_id)
@@ -225,15 +252,20 @@ def update_progress_reader(process):
                 elapsed_updater_id = None
             start_time = None
     finally:
+        # Ensure process reference is cleared and buttons updated
         with process_lock:
             current_process = None
         root.after(0, lambda: pause_resume_button.configure(text="Start Download", bootstyle="success"))
         root.after(0, lambda: eta_label.configure(text="Remaining: --:--"))
 
 def start_download_thread(command):
+    """
+    Start the yt-dlp subprocess with given command and spawn a reader thread.
+    On Windows the console window is suppressed (CREATE_NO_WINDOW) to avoid flashing a console.
+    """
     global current_process
     try:
-        # Unsichtbares Fenster (kein CMD beim Download)
+        # Invisible window / no cmd shown during download (Windows-specific)
         startupinfo = None
         creationflags = 0
         if os.name == "nt":
@@ -256,11 +288,16 @@ def start_download_thread(command):
         )
         with process_lock:
             current_process = proc
+        # reader thread will parse progress and update GUI
         threading.Thread(target=update_progress_reader, args=(proc,), daemon=True).start()
     except Exception as e:
         messagebox.showerror("Error", f"Failed to start: {e}")
 
 def stop_current_process(kill=False):
+    """
+    Terminate the running subprocess. If kill=True and terminate doesn't stop it, force kill.
+    This does not clear last_command so a paused download can be resumed.
+    """
     global current_process, stop_requested
     stop_requested = True
     with process_lock:
@@ -280,9 +317,9 @@ def stop_current_process(kill=False):
 def pause_or_resume():
     """
     Button state machine:
-    - "Start Download": start anew
-    - "Pause": terminate running process but keep last_command for resume
-    - "Resume": start process again using last_command (if available)
+    - "Start Download": start a new download
+    - "Pause": stop the running process but keep last_command for resume
+    - "Resume": start a new subprocess using the saved last_command
     """
     global paused, stop_requested, last_command, start_time, elapsed_updater_id
 
@@ -292,12 +329,12 @@ def pause_or_resume():
     if state == "Pause":
         if current_process:
             stop_requested = True
-            # do not destroy last_command; we intend to resume
+            # keep last_command to allow resuming later
             stop_current_process(kill=False)
             paused = True
             pause_resume_button.configure(text="Resume", bootstyle="warning")
             progress_label.configure(text="Paused")
-            # stop elapsed timer but keep elapsed value
+            # stop elapsed timer but keep displayed elapsed value
             if elapsed_updater_id:
                 try:
                     root.after_cancel(elapsed_updater_id)
@@ -312,7 +349,7 @@ def pause_or_resume():
             paused = False
             pause_resume_button.configure(text="Pause", bootstyle="danger-outline")
             progress_label.configure(text="Resuming...")
-            # restart elapsed timer
+            # restart elapsed timer (preserve previous elapsed if any)
             if start_time is None:
                 start_time = time.time()
             def update_elapsed():
@@ -324,9 +361,10 @@ def pause_or_resume():
                     elapsed_label.configure(text=f"Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
                     elapsed_updater_id = root.after(500, update_elapsed)
                 else:
-                    # don't reset to 00:00:00 here; keep last shown value
+                    # keep last shown elapsed time when paused/stopped
                     pass
             update_elapsed()
+            # start download using previous command (fresh subprocess)
             threading.Thread(target=start_download_thread, args=(last_command,), daemon=True).start()
         else:
             messagebox.showwarning("Resume", "No previous download command to resume.")
@@ -339,21 +377,21 @@ def pause_or_resume():
             messagebox.showerror("Error", "Please enter a valid YouTube URL or playlist.")
             return
 
-        # check executables
+        # check required executables are present in the Necessary folder
         yt_dlp_path = resource_path("yt-dlp.exe")
         ffmpeg_path = resource_path("ffmpeg.exe")
         if not os.path.exists(yt_dlp_path) or not os.path.exists(ffmpeg_path):
             messagebox.showerror("Error", "yt-dlp.exe or ffmpeg.exe not found in 'Necessary' folder.")
             return
 
-        # --- Entfernt: keine Video-Info-Abfrage / kein Popup mehr ---
+        # Note: Removed interactive video info prompt to simplify flow
 
         outdir = output_var.get() or settings["default_output"]
         os.makedirs(outdir, exist_ok=True)
 
         command = build_command(url, outdir)
 
-        # record last_command for resume
+        # Save last_command so user can resume after a pause
         last_command = command.copy()
 
         # reset UI and start
@@ -366,7 +404,7 @@ def pause_or_resume():
         stop_requested = False
         paused = False
 
-        # start elapsed updater
+        # start elapsed updater (updates elapsed_label)
         def update_elapsed():
             global elapsed_updater_id
             if start_time and not stop_requested and not paused:
@@ -376,7 +414,7 @@ def pause_or_resume():
                 elapsed_label.configure(text=f"Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
                 elapsed_updater_id = root.after(500, update_elapsed)
             else:
-                # keep last shown time when paused/stopped
+                # keep last shown value when paused/stopped
                 pass
         update_elapsed()
 
@@ -385,7 +423,8 @@ def pause_or_resume():
 
 def cancel_download():
     """
-    Cancel: kill process and clear last_command (so Resume won't work).
+    Cancel the current download: force-kill the process and clear last_command.
+    After cancel the user cannot resume the cancelled download.
     """
     global paused, last_command, stop_requested, start_time, elapsed_updater_id
     if current_process:
@@ -406,6 +445,10 @@ def cancel_download():
 
 # ---------------- Command builder ----------------
 def build_command(url, outdir):
+    """
+    Build yt-dlp command based on UI options.
+    Includes ffmpeg location, output template, proxy and format choices.
+    """
     yt_dlp_path = resource_path("yt-dlp.exe")
     ffmpeg_path = resource_path("ffmpeg.exe")
     cmd = [yt_dlp_path, "--ffmpeg-location", ffmpeg_path, "-o", os.path.join(outdir, "%(title)s.%(ext)s"), "--progress"]
@@ -418,10 +461,13 @@ def build_command(url, outdir):
     fmt = format_var.get()
     q = quality_var.get()
 
+    # Build format selection and post-processing options
     if fmt == "mp4":
         if remux_var.get():
+            # Fast: remux to mp4 without re-encoding when possible
             cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best", "--remux-video", "mp4"])
         elif recode_var.get():
+            # Slow: re-encode to mp4
             cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best", "--recode-video", "mp4"])
         else:
             cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best"])
@@ -485,7 +531,7 @@ eta_label.pack(pady=(0, 6))
 status_box = tk.Text(root, height=18, width=85)
 status_box.pack(pady=10)
 
-# Settings variables
+# Settings variables (bound to UI controls)
 default_folder_var = tk.StringVar(value=settings["default_output"])
 use_proxy_var = tk.IntVar(value=1 if settings["use_proxy"] else 0)
 proxy_var = tk.StringVar(value=settings["proxy"])
@@ -494,7 +540,7 @@ recode_var = tk.IntVar(value=1 if settings["recode_mp4"] else 0)
 extract_audio_var = tk.IntVar(value=1 if settings["extract_audio"] else 0)
 
 def on_close():
-    # ensure we stop process cleanly
+    # Ensure any running process is stopped before closing the UI
     cancel_download()
     root.destroy()
 
