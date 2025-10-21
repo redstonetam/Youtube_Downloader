@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import threading
 import time
@@ -11,10 +12,20 @@ from ttkbootstrap.constants import *
 
 # ---------------- Resource & Settings ----------------
 def resource_path(relative_path):
-    base = os.path.abspath(os.path.dirname(__file__))
+    """
+    Gibt den Pfad zur Ressource zurück.
+    Wenn das Script gebündelt ist (pyinstaller --onefile), benutzt es sys._MEIPASS.
+    Bei normaler Ausführung referenziert es den lokalen Ordner und den "Necessary"-Unterordner.
+    """
+    try:
+        base = sys._MEIPASS  # PyInstaller temp folder
+    except Exception:
+        base = os.path.abspath(os.path.dirname(__file__))
+    # Settings & executables liegen im Necessary-Ordner
     return os.path.join(base, "Necessary", relative_path)
 
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+# SETTINGS_FILE liegt im Necessary-Ordner (wie gewünscht)
+SETTINGS_FILE = resource_path("settings.json")
 DEFAULT_SETTINGS = {
     "default_output": os.path.join(os.path.expanduser("~"), "Downloads"),
     "use_proxy": False,
@@ -37,6 +48,9 @@ def load_settings():
 
 def save_settings(s):
     try:
+        # Stelle sicher, dass Necessary-Ordner existiert (z. B. beim ersten Start)
+        settings_dir = os.path.dirname(SETTINGS_FILE)
+        os.makedirs(settings_dir, exist_ok=True)
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(s, f, indent=2, ensure_ascii=False)
     except Exception as e:
@@ -56,6 +70,7 @@ eta_text = ""
 
 # ---------------- Helpers ----------------
 def get_video_info(url, format_choice, quality_choice):
+    # Optional helper - jetzt nicht automatisch aufgerufen
     yt_dlp_path = resource_path("yt-dlp.exe")
     if not os.path.exists(yt_dlp_path):
         return "yt-dlp.exe not found"
@@ -159,7 +174,7 @@ def open_settings():
 
 # ---------------- Process / Download handling ----------------
 def update_progress_reader(process):
-    global current_process, stop_requested, eta_text
+    global current_process, stop_requested, eta_text, elapsed_updater_id, start_time
     try:
         for line in process.stdout:
             if stop_requested:
@@ -195,7 +210,20 @@ def update_progress_reader(process):
         if not stop_requested and not paused:
             root.after(0, lambda: progress_bar.configure(value=100))
             root.after(0, lambda: progress_label.configure(text="Download finished ✅"))
-            root.after(0, lambda: messagebox.showinfo("Success", f"Download finished! Saved to: {output_var.get()}"))
+            # Optional: kleine Info (kann entfernt werden, wenn gewünscht)
+            try:
+                root.after(0, lambda: messagebox.showinfo("Success", f"Download finished! Saved to: {output_var.get()}"))
+            except Exception:
+                pass
+
+            # Stoppe Zeitmesser nach Abschluss
+            if elapsed_updater_id:
+                try:
+                    root.after_cancel(elapsed_updater_id)
+                except Exception:
+                    pass
+                elapsed_updater_id = None
+            start_time = None
     finally:
         with process_lock:
             current_process = None
@@ -205,8 +233,27 @@ def update_progress_reader(process):
 def start_download_thread(command):
     global current_process
     try:
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, bufsize=1, universal_newlines=True)
+        # Unsichtbares Fenster (kein CMD beim Download)
+        startupinfo = None
+        creationflags = 0
+        if os.name == "nt":
+            try:
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            except Exception:
+                startupinfo = None
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+        proc = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+            startupinfo=startupinfo,
+            creationflags=creationflags
+        )
         with process_lock:
             current_process = proc
         threading.Thread(target=update_progress_reader, args=(proc,), daemon=True).start()
@@ -252,8 +299,11 @@ def pause_or_resume():
             progress_label.configure(text="Paused")
             # stop elapsed timer but keep elapsed value
             if elapsed_updater_id:
-                root.after_cancel(elapsed_updater_id)
-        return
+                try:
+                    root.after_cancel(elapsed_updater_id)
+                except Exception:
+                    pass
+            return
 
     # If currently paused -> Resume
     if state == "Resume":
@@ -274,7 +324,8 @@ def pause_or_resume():
                     elapsed_label.configure(text=f"Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
                     elapsed_updater_id = root.after(500, update_elapsed)
                 else:
-                    elapsed_label.configure(text="Elapsed: 00:00:00")
+                    # don't reset to 00:00:00 here; keep last shown value
+                    pass
             update_elapsed()
             threading.Thread(target=start_download_thread, args=(last_command,), daemon=True).start()
         else:
@@ -295,9 +346,7 @@ def pause_or_resume():
             messagebox.showerror("Error", "yt-dlp.exe or ffmpeg.exe not found in 'Necessary' folder.")
             return
 
-        # Get info (nice to show)
-        info_text = get_video_info(url, format_var.get(), quality_var.get())
-        messagebox.showinfo("Video Info", info_text)
+        # --- Entfernt: keine Video-Info-Abfrage / kein Popup mehr ---
 
         outdir = output_var.get() or settings["default_output"]
         os.makedirs(outdir, exist_ok=True)
@@ -327,7 +376,8 @@ def pause_or_resume():
                 elapsed_label.configure(text=f"Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
                 elapsed_updater_id = root.after(500, update_elapsed)
             else:
-                elapsed_label.configure(text="Elapsed: 00:00:00")
+                # keep last shown time when paused/stopped
+                pass
         update_elapsed()
 
         threading.Thread(target=start_download_thread, args=(command,), daemon=True).start()
@@ -337,7 +387,7 @@ def cancel_download():
     """
     Cancel: kill process and clear last_command (so Resume won't work).
     """
-    global paused, last_command, stop_requested, start_time
+    global paused, last_command, stop_requested, start_time, elapsed_updater_id
     if current_process:
         stop_requested = True
         stop_current_process(kill=True)
@@ -351,6 +401,7 @@ def cancel_download():
             root.after_cancel(elapsed_updater_id)
     except Exception:
         pass
+    elapsed_updater_id = None
     start_time = None
 
 # ---------------- Command builder ----------------
