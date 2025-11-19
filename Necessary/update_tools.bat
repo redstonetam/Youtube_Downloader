@@ -29,4 +29,4 @@ echo.
 echo =========================================
 echo   Update abgeschlossen!
 echo =========================================
-pause
+quite
