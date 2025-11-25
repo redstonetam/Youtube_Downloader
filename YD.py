@@ -6,9 +6,10 @@ import time
 import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from tkinter import ttk    
 import ttkbootstrap as tb
-from ttkbootstrap import ttk
 from ttkbootstrap.constants import *
+
 
 # ---------------- Resource & Settings ----------------
 def resource_path(relative_path):
