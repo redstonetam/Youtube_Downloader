@@ -140,40 +140,59 @@ def open_settings():
     # Build settings window (modal-like) that allows the user to change persistent options
     settings_win = tb.Toplevel(root)
     settings_win.title("Settings")
-    settings_win.geometry("520x500")
+    settings_win.geometry("580x650")
     settings_win.transient(root)
 
-    ttk.Label(settings_win, text="Default output folder:").pack(anchor="w", padx=10, pady=(12,0))
-    df_frame = ttk.Frame(settings_win)
-    df_frame.pack(fill="x", padx=10)
+    # Create main frame with padding
+    main_settings_frame = ttk.Frame(settings_win, padding=16)
+    main_settings_frame.pack(fill="both", expand=True)
+
+    # ===== Output Folder Section =====
+    folder_section = ttk.LabelFrame(main_settings_frame, text="Save Location", padding=12)
+    folder_section.pack(fill="x", pady=(0, 12))
+
+    ttk.Label(folder_section, text="Default output folder:", font=("TkDefaultFont", 9)).pack(anchor="w", pady=(0, 4))
+    df_frame = ttk.Frame(folder_section)
+    df_frame.pack(fill="x")
     default_folder_entry = ttk.Entry(df_frame, width=50, textvariable=default_folder_var, state="readonly")
-    default_folder_entry.pack(side="left", padx=(0,8))
+    default_folder_entry.pack(side="left", padx=(0, 8), fill="x", expand=True)
     ttk.Button(df_frame, text="Change", bootstyle="info", command=choose_default_folder).pack(side="left")
 
-    ttk.Separator(settings_win).pack(fill="x", pady=8, padx=10)
+    # ===== Proxy Section =====
+    proxy_section = ttk.LabelFrame(main_settings_frame, text="Network (Optional)", padding=12)
+    proxy_section.pack(fill="x", pady=(0, 12))
 
-    proxy_frame = ttk.Frame(settings_win)
-    proxy_frame.pack(fill="x", padx=10)
-    ttk.Checkbutton(proxy_frame, text="Use proxy", variable=use_proxy_var, bootstyle="round-toggle").pack(anchor="w")
-    ttk.Label(proxy_frame, text="Proxy (http://user:pass@host:port):").pack(anchor="w", pady=(6,0))
-    ttk.Entry(proxy_frame, width=60, textvariable=proxy_var).pack(anchor="w", pady=(0,6))
+    proxy_check = ttk.Checkbutton(proxy_section, text="Use proxy", variable=use_proxy_var, bootstyle="round-toggle")
+    proxy_check.pack(anchor="w", pady=(0, 8))
+    
+    ttk.Label(proxy_section, text="Proxy (http://user:pass@host:port):", font=("TkDefaultFont", 9)).pack(anchor="w", pady=(0, 4))
+    ttk.Entry(proxy_section, width=60, textvariable=proxy_var).pack(anchor="w", fill="x")
 
-    ttk.Separator(settings_win).pack(fill="x", pady=8, padx=10)
+    # ===== Video Options Section =====
+    video_section = ttk.LabelFrame(main_settings_frame, text="Video Conversion", padding=12)
+    video_section.pack(fill="x", pady=(0, 12))
 
-    ttk.Label(settings_win, text="Video options:").pack(anchor="w", padx=10)
-    ttk.Checkbutton(settings_win, text="Auto remux to MP4 (fast, no re-encode)", variable=remux_var, bootstyle="round-toggle").pack(anchor="w", padx=20)
-    ttk.Checkbutton(settings_win, text="If remux fails: re-encode to MP4 (slow)", variable=recode_var, bootstyle="round-toggle").pack(anchor="w", padx=20, pady=(4,0))
+    ttk.Checkbutton(video_section, text="Auto remux to MP4 (fast, no re-encode)", variable=remux_var, bootstyle="round-toggle").pack(anchor="w", pady=(0, 6))
+    ttk.Checkbutton(video_section, text="If remux fails: re-encode to MP4 (slower)", variable=recode_var, bootstyle="round-toggle").pack(anchor="w")
 
-    ttk.Separator(settings_win).pack(fill="x", pady=8, padx=10)
+    # ===== Audio Extract Section =====
+    audio_section = ttk.LabelFrame(main_settings_frame, text="Audio Extraction", padding=12)
+    audio_section.pack(fill="x", pady=(0, 12))
 
-    ttk.Checkbutton(settings_win, text="Extract audio when MP3/WAV", variable=extract_audio_var, bootstyle="round-toggle").pack(anchor="w", padx=10)
+    ttk.Checkbutton(audio_section, text="Extract audio when downloading MP3/WAV", variable=extract_audio_var, bootstyle="round-toggle").pack(anchor="w")
 
-    ttk.Separator(settings_win).pack(fill="x", pady=8, padx=10)
+    # ===== Theme Section =====
+    theme_section = ttk.LabelFrame(main_settings_frame, text="Appearance", padding=12)
+    theme_section.pack(fill="x", pady=(0, 20))
 
-    ttk.Label(settings_win, text="Theme:").pack(anchor="w", padx=10)
-    theme_combo = ttk.Combobox(settings_win, values=["cosmo","flatly","darkly","cyborg","superhero","journal"], width=20)
+    ttk.Label(theme_section, text="Theme:", font=("TkDefaultFont", 9)).pack(anchor="w", pady=(0, 4))
+    theme_combo = ttk.Combobox(theme_section, values=["cosmo", "flatly", "darkly", "cyborg", "superhero", "journal"], width=25, state="readonly")
     theme_combo.set(settings.get("theme", "cosmo"))
-    theme_combo.pack(anchor="w", padx=20, pady=(0,8))
+    theme_combo.pack(anchor="w", fill="x")
+
+    # ===== Buttons =====
+    button_frame = ttk.Frame(main_settings_frame)
+    button_frame.pack(fill="x", pady=(12, 0))
 
     def save_and_close():
         # Persist settings and apply chosen theme if possible
@@ -192,8 +211,8 @@ def open_settings():
         except Exception:
             pass
 
-    ttk.Button(settings_win, text="Save", bootstyle="primary", command=save_and_close).pack(side="right", padx=12, pady=12)
-    ttk.Button(settings_win, text="Cancel", bootstyle="light", command=settings_win.destroy).pack(side="right", pady=12)
+    ttk.Button(button_frame, text="✓ Save", bootstyle="success", command=save_and_close, width=15).pack(side="right", padx=(8, 0))
+    ttk.Button(button_frame, text="✕ Cancel", bootstyle="light", command=settings_win.destroy, width=15).pack(side="right")
 
 # ---------------- Process / Download handling ----------------
 def update_progress_reader(process):
@@ -222,7 +241,7 @@ def update_progress_reader(process):
                         try:
                             val = float(p.replace("%","").replace(",","").replace("%",""))
                             root.after(0, lambda v=val: progress_bar.configure(value=v))
-                            root.after(0, lambda v=val: progress_label.configure(text=f"Progress: {v:.1f}%"))
+                            root.after(0, lambda v=val: progress_label.configure(text=f"⬇ Downloading... {v:.1f}%"))
                         except Exception:
                             pass
 
@@ -232,15 +251,15 @@ def update_progress_reader(process):
                 for i,tok in enumerate(tokens):
                     if tok == "ETA" and i+1 < len(tokens):
                         eta_text = tokens[i+1]
-                        root.after(0, lambda: eta_label.configure(text=f"Remaining: {eta_text}"))
+                        root.after(0, lambda: eta_label.configure(text=f"⏳ Remaining: {eta_text}"))
 
         # finished normally (if not paused/stopped) -> finalize UI
         if not stop_requested and not paused:
             root.after(0, lambda: progress_bar.configure(value=100))
-            root.after(0, lambda: progress_label.configure(text="Download finished ✅"))
+            root.after(0, lambda: progress_label.configure(text="✓ Download finished"))
             # show a small info dialog (best-effort)
             try:
-                root.after(0, lambda: messagebox.showinfo("Success", f"Download finished! Saved to: {output_var.get()}"))
+                root.after(0, lambda: messagebox.showinfo("Success", f"✓ Download finished!\n\nSaved to:\n{output_var.get()}"))
             except Exception:
                 pass
 
@@ -256,8 +275,8 @@ def update_progress_reader(process):
         # Ensure process reference is cleared and buttons updated
         with process_lock:
             current_process = None
-        root.after(0, lambda: pause_resume_button.configure(text="Start Download", bootstyle="success"))
-        root.after(0, lambda: eta_label.configure(text="Remaining: --:--"))
+        root.after(0, lambda: pause_resume_button.configure(text="▶ Start Download", bootstyle="success"))
+        root.after(0, lambda: eta_label.configure(text="⏳ Remaining: --:--"))
 
 def start_download_thread(command):
     """
@@ -327,14 +346,14 @@ def pause_or_resume():
     state = pause_resume_button.cget("text")
 
     # If currently running -> Pause
-    if state == "Pause":
+    if state == "Pause" or state == "⏸ Pause":
         if current_process:
             stop_requested = True
             # keep last_command to allow resuming later
             stop_current_process(kill=False)
             paused = True
-            pause_resume_button.configure(text="Resume", bootstyle="warning")
-            progress_label.configure(text="Paused")
+            pause_resume_button.configure(text="▶ Resume", bootstyle="warning")
+            progress_label.configure(text="⏸ Paused")
             # stop elapsed timer but keep displayed elapsed value
             if elapsed_updater_id:
                 try:
@@ -344,12 +363,12 @@ def pause_or_resume():
             return
 
     # If currently paused -> Resume
-    if state == "Resume":
+    if state == "Resume" or state == "▶ Resume":
         if last_command:
             stop_requested = False
             paused = False
-            pause_resume_button.configure(text="Pause", bootstyle="danger-outline")
-            progress_label.configure(text="Resuming...")
+            pause_resume_button.configure(text="⏸ Pause", bootstyle="danger-outline")
+            progress_label.configure(text="⬇ Resuming...")
             # restart elapsed timer (preserve previous elapsed if any)
             if start_time is None:
                 start_time = time.time()
@@ -359,7 +378,7 @@ def pause_or_resume():
                     elapsed = int(time.time() - start_time)
                     mins, secs = divmod(elapsed, 60)
                     hours, mins = divmod(mins, 60)
-                    elapsed_label.configure(text=f"Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
+                    elapsed_label.configure(text=f"⏱ Elapsed: {hours:02d}:{mins:02d}:{secs:02d}")
                     elapsed_updater_id = root.after(500, update_elapsed)
                 else:
                     # keep last shown elapsed time when paused/stopped
@@ -372,7 +391,7 @@ def pause_or_resume():
         return
 
     # If starting from idle -> Start Download
-    if state in ("Start Download", "Start"):
+    if state in ("Start Download", "Start", "▶ Start Download"):
         url = url_entry.get().strip()
         if not url:
             messagebox.showerror("Error", "Please enter a valid YouTube URL or playlist.")
@@ -397,9 +416,9 @@ def pause_or_resume():
 
         # reset UI and start
         progress_bar.configure(value=0, maximum=100, mode="determinate")
-        progress_label.configure(text="Starting...")
+        progress_label.configure(text="⬇ Downloading...")
         status_box.delete(1.0, tk.END)
-        pause_resume_button.configure(text="Pause", bootstyle="danger-outline")
+        pause_resume_button.configure(text="⏸ Pause", bootstyle="danger-outline")
         cancel_button.configure(state="normal")
         start_time = time.time()
         stop_requested = False
@@ -433,9 +452,9 @@ def cancel_download():
         stop_current_process(kill=True)
     paused = False
     last_command = None
-    pause_resume_button.configure(text="Start Download", bootstyle="success")
+    pause_resume_button.configure(text="▶ Start Download", bootstyle="success")
     cancel_button.configure(state="disabled")
-    progress_label.configure(text="Cancelled")
+    progress_label.configure(text="✕ Cancelled")
     try:
         if elapsed_updater_id:
             root.after_cancel(elapsed_updater_id)
@@ -482,8 +501,18 @@ def build_command(url, outdir):
         cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best", "--recode-video", "mov"])
 
     # Add subtitle options if selected
-    if subtitles_var.get() == "subs in en":
-        cmd.extend(["--write-sub", "--write-auto-sub", "--sub-lang", "en", "--sub-format", "srt", "--embed-subs"])
+    subtitles_choice = subtitles_var.get()
+    if subtitles_choice != "none":
+        if subtitles_choice == "auto-all":
+            # Auto-generate subtitles in all available languages
+            cmd.extend(["--write-auto-sub", "--sub-format", "srt"])
+        elif subtitles_choice.startswith("lang-"):
+            # Extract language code (format: "lang-en", "lang-es", etc.)
+            lang_code = subtitles_choice.split("-", 1)[1]
+            cmd.extend(["--write-sub", "--write-auto-sub", "--sub-lang", lang_code, "--sub-format", "srt"])
+        else:
+            # Default: English subtitles
+            cmd.extend(["--write-sub", "--write-auto-sub", "--sub-lang", "en", "--sub-format", "srt"])
 
     cmd.append(url)
     return cmd
@@ -491,53 +520,138 @@ def build_command(url, outdir):
 # ---------------- GUI ----------------
 root = tb.Window(themename=settings.get("theme", "cosmo"))
 root.title("YouTube Downloader")
-root.geometry("640x720")
+root.geometry("700x900")
 
-top_frame = ttk.Frame(root)
-top_frame.pack(fill="x", pady=(8, 0), padx=10)
-ttk.Label(top_frame, text="YouTube Downloader", font=("TkDefaultFont", 14, "bold")).pack(side="left")
-ttk.Button(top_frame, text="⚙️ Settings", bootstyle="light", command=open_settings).pack(side="right")
+# ===== Header Section =====
+header_frame = ttk.Frame(root)
+header_frame.pack(fill="x", padx=16, pady=(16, 0))
 
-ttk.Label(root, text="YouTube URL or Playlist URL:").pack(pady=(12, 4))
-url_entry = ttk.Entry(root, width=70)
-url_entry.pack()
+title_label = ttk.Label(header_frame, text="YouTube Downloader", font=("Helvetica", 20, "bold"))
+title_label.pack(side="left", anchor="w")
 
-ttk.Label(root, text="Format:").pack(pady=(10, 4))
+settings_btn = ttk.Button(header_frame, text="⚙ Settings", bootstyle="light", command=open_settings)
+settings_btn.pack(side="right")
+
+ttk.Separator(root, orient="horizontal").pack(fill="x", pady=12, padx=0)
+
+# ===== Main Content Frame (Scrollable area) =====
+main_frame = ttk.Frame(root)
+main_frame.pack(fill="both", expand=True, padx=16, pady=0)
+
+# ===== URL Input Section =====
+url_section = ttk.LabelFrame(main_frame, text="Source", padding=12)
+url_section.pack(fill="x", pady=(0, 12))
+
+ttk.Label(url_section, text="YouTube URL or Playlist:", font=("TkDefaultFont", 9)).pack(anchor="w", pady=(0, 4))
+url_entry = ttk.Entry(url_section, width=70)
+url_entry.pack(fill="x")
+ttk.Label(url_section, text="Paste your video or playlist link", font=("TkDefaultFont", 8, "italic")).pack(anchor="w", pady=(2, 0))
+
+# ===== Download Options Section =====
+options_section = ttk.LabelFrame(main_frame, text="Download Options", padding=12)
+options_section.pack(fill="x", pady=(0, 12))
+
+# Format and Quality row
+format_quality_frame = ttk.Frame(options_section)
+format_quality_frame.pack(fill="x", pady=(0, 10))
+
+# Format column
+format_col = ttk.Frame(format_quality_frame)
+format_col.pack(side="left", expand=True, padx=(0, 8))
+ttk.Label(format_col, text="Format:", font=("TkDefaultFont", 9)).pack(anchor="w", pady=(0, 4))
 format_var = tk.StringVar(value="mp4")
-ttk.Combobox(root, textvariable=format_var, values=["mp4", "mp3", "wav", "webm", "mov"], width=20).pack()
+format_combo = ttk.Combobox(format_col, textvariable=format_var, values=["mp4", "mp3", "wav", "webm", "mov"], width=15, state="readonly")
+format_combo.pack(fill="x")
 
-ttk.Label(root, text="Quality:").pack(pady=(10, 4))
+# Quality column
+quality_col = ttk.Frame(format_quality_frame)
+quality_col.pack(side="left", expand=True, padx=(8, 0))
+ttk.Label(quality_col, text="Quality:", font=("TkDefaultFont", 9)).pack(anchor="w", pady=(0, 4))
 quality_var = tk.StringVar(value="1080")
-ttk.Combobox(root, textvariable=quality_var, values=["144", "240", "360", "480", "720", "1080", "1440", "2160"], width=20).pack()
+quality_combo = ttk.Combobox(quality_col, textvariable=quality_var, values=["144", "240", "360", "480", "720", "1080", "1440", "2160"], width=15, state="readonly")
+quality_combo.pack(fill="x")
 
-subtitles_label = tk.Label(root, text="Subtitles:", bg="black", fg="white")
-subtitles_label.pack(pady=(10, 4))
+# Subtitles row
+ttk.Label(options_section, text="Subtitles:", font=("TkDefaultFont", 9)).pack(anchor="w", pady=(6, 4))
 subtitles_var = tk.StringVar(value="none")
-ttk.Combobox(root, textvariable=subtitles_var, values=["none", "subs in en", "default none"], width=20).pack()
+subtitles_options = [
+    "none",
+    "auto-all",
+    "lang-en (English)",
+    "lang-es (Spanish)",
+    "lang-fr (French)",
+    "lang-de (German)",
+    "lang-it (Italian)",
+    "lang-pt (Portuguese)",
+    "lang-ru (Russian)",
+    "lang-ja (Japanese)",
+    "lang-ko (Korean)",
+    "lang-zh (Chinese)",
+    "lang-ar (Arabic)",
+    "lang-hi (Hindi)",
+    "lang-pl (Polish)",
+    "lang-tr (Turkish)",
+    "lang-vi (Vietnamese)",
+    "lang-th (Thai)",
+]
+subtitles_combo = ttk.Combobox(options_section, textvariable=subtitles_var, values=subtitles_options, width=25, state="readonly")
+subtitles_combo.pack(fill="x")
+ttk.Label(options_section, text="'auto-all' downloads auto-generated subs in all available languages", font=("TkDefaultFont", 8, "italic")).pack(anchor="w", pady=(2, 0))
+
+# ===== Output Folder Section =====
+output_section = ttk.LabelFrame(main_frame, text="Save Location", padding=12)
+output_section.pack(fill="x", pady=(0, 12))
+
 output_var = tk.StringVar(value=settings.get("default_output", DEFAULT_SETTINGS["default_output"]))
-ttk.Entry(root, width=60, textvariable=output_var, state="readonly").pack()
-ttk.Button(root, text="Choose folder", bootstyle="info", command=choose_output_folder).pack(pady=(6, 8))
+ttk.Label(output_section, text="Destination folder:", font=("TkDefaultFont", 9)).pack(anchor="w", pady=(0, 4))
+output_entry_frame = ttk.Frame(output_section)
+output_entry_frame.pack(fill="x", pady=(0, 8))
+ttk.Entry(output_entry_frame, width=60, textvariable=output_var, state="readonly").pack(side="left", fill="x", expand=True, padx=(0, 8))
+ttk.Button(output_entry_frame, text="Browse", bootstyle="info", width=12, command=choose_output_folder).pack(side="left")
 
-# Pause/Resume + Cancel buttons
-button_frame = ttk.Frame(root)
-button_frame.pack(pady=(6,6))
-pause_resume_button = ttk.Button(button_frame, text="Start Download", bootstyle="success", width=18, command=pause_or_resume)
-pause_resume_button.pack(side="left", padx=(0,8))
-cancel_button = ttk.Button(button_frame, text="Cancel", bootstyle="danger", width=12, command=cancel_download, state="disabled")
-cancel_button.pack(side="left")
+# ===== Control Buttons Section =====
+button_section = ttk.Frame(main_frame)
+button_section.pack(fill="x", pady=(6, 12))
 
-progress_label = ttk.Label(root, text="No download yet")
-progress_label.pack(pady=(6, 4))
-progress_bar = ttk.Progressbar(root, length=560, mode="determinate", bootstyle="success-striped")
-progress_bar.pack()
+pause_resume_button = ttk.Button(button_section, text="▶ Start Download", bootstyle="success", width=25, command=pause_or_resume)
+pause_resume_button.pack(side="left", padx=(0, 8), fill="x", expand=True)
 
-elapsed_label = ttk.Label(root, text="Elapsed: 00:00:00")
-elapsed_label.pack(pady=(6, 2))
-eta_label = ttk.Label(root, text="Remaining: --:--")
-eta_label.pack(pady=(0, 6))
+cancel_button = ttk.Button(button_section, text="✕ Cancel", bootstyle="danger", width=15, command=cancel_download, state="disabled")
+cancel_button.pack(side="left", fill="x")
 
-status_box = tk.Text(root, height=18, width=85)
-status_box.pack(pady=10)
+# ===== Progress Section =====
+progress_section = ttk.LabelFrame(main_frame, text="Progress", padding=12)
+progress_section.pack(fill="x", pady=(0, 12))
+
+progress_label = ttk.Label(progress_section, text="Ready", font=("TkDefaultFont", 10, "bold"))
+progress_label.pack(anchor="w", pady=(0, 6))
+
+progress_bar = ttk.Progressbar(progress_section, length=600, mode="determinate", bootstyle="success-striped")
+progress_bar.pack(fill="x", pady=(0, 8))
+
+# Time info row
+time_frame = ttk.Frame(progress_section)
+time_frame.pack(fill="x")
+
+elapsed_label = ttk.Label(time_frame, text="⏱ Elapsed: 00:00:00", font=("TkDefaultFont", 9))
+elapsed_label.pack(side="left", padx=(0, 16))
+
+eta_label = ttk.Label(time_frame, text="⏳ Remaining: --:--", font=("TkDefaultFont", 9))
+eta_label.pack(side="left")
+
+# ===== Status Output Section =====
+output_section_label = ttk.LabelFrame(main_frame, text="Download Log", padding=8)
+output_section_label.pack(fill="both", expand=True, pady=(0, 12))
+
+status_frame = ttk.Frame(output_section_label)
+status_frame.pack(fill="both", expand=True)
+
+scrollbar = ttk.Scrollbar(status_frame)
+scrollbar.pack(side="right", fill="y")
+
+status_box = tk.Text(status_frame, height=12, width=85, yscrollcommand=scrollbar.set, font=("Courier", 8))
+status_box.pack(side="left", fill="both", expand=True)
+scrollbar.config(command=status_box.yview)
 
 # Settings variables (bound to UI controls)
 default_folder_var = tk.StringVar(value=settings["default_output"])
