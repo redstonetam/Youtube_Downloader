@@ -481,6 +481,10 @@ def build_command(url, outdir):
     elif fmt == "mov":
         cmd.extend(["-f", f"bestvideo[height<={q}]+bestaudio[ext=m4a]/best", "--recode-video", "mov"])
 
+    # Add subtitle options if selected
+    if subtitles_var.get() == "subs in en":
+        cmd.extend(["--write-sub", "--write-auto-sub", "--sub-lang", "en", "--sub-format", "srt", "--embed-subs"])
+
     cmd.append(url)
     return cmd
 
@@ -506,7 +510,10 @@ ttk.Label(root, text="Quality:").pack(pady=(10, 4))
 quality_var = tk.StringVar(value="1080")
 ttk.Combobox(root, textvariable=quality_var, values=["144", "240", "360", "480", "720", "1080", "1440", "2160"], width=20).pack()
 
-ttk.Label(root, text="Output folder:").pack(pady=(10, 4))
+subtitles_label = tk.Label(root, text="Subtitles:", bg="black", fg="white")
+subtitles_label.pack(pady=(10, 4))
+subtitles_var = tk.StringVar(value="none")
+ttk.Combobox(root, textvariable=subtitles_var, values=["none", "subs in en", "default none"], width=20).pack()
 output_var = tk.StringVar(value=settings.get("default_output", DEFAULT_SETTINGS["default_output"]))
 ttk.Entry(root, width=60, textvariable=output_var, state="readonly").pack()
 ttk.Button(root, text="Choose folder", bootstyle="info", command=choose_output_folder).pack(pady=(6, 8))
