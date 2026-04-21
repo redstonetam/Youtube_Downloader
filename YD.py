@@ -504,15 +504,44 @@ def build_command(url, outdir):
     subtitles_choice = subtitles_var.get()
     if subtitles_choice != "none":
         if subtitles_choice == "auto-all":
-            # Auto-generate subtitles in all available languages
-            cmd.extend(["--write-auto-sub", "--sub-format", "srt"])
+            # Download all available subtitles, including auto-generated ones
+            cmd.extend([
+                "--all-subs",
+                "--write-auto-sub",
+                "--sub-format",
+                "srt/best",
+                "--convert-subs",
+                "srt",
+            ])
         elif subtitles_choice.startswith("lang-"):
-            # Extract language code (format: "lang-en", "lang-es", etc.)
-            lang_code = subtitles_choice.split("-", 1)[1]
-            cmd.extend(["--write-sub", "--write-auto-sub", "--sub-lang", lang_code, "--sub-format", "srt"])
+            # Extract language code from values like "lang-en (English)"
+            lang_code = subtitles_choice[5:].split(" ", 1)[0]
+            cmd.extend([
+                "--write-sub",
+                "--write-auto-sub",
+                "--sub-lang",
+                lang_code,
+                "--sub-format",
+                "srt/best",
+                "--convert-subs",
+                "srt",
+            ])
         else:
             # Default: English subtitles
-            cmd.extend(["--write-sub", "--write-auto-sub", "--sub-lang", "en", "--sub-format", "srt"])
+            cmd.extend([
+                "--write-sub",
+                "--write-auto-sub",
+                "--sub-lang",
+                "en",
+                "--sub-format",
+                "srt/best",
+                "--convert-subs",
+                "srt",
+            ])
+
+        # Embed subtitles into the resulting video container when supported
+        if fmt in ("mp4", "webm", "mov"):
+            cmd.append("--embed-subs")
 
     cmd.append(url)
     return cmd
@@ -596,7 +625,7 @@ subtitles_options = [
 ]
 subtitles_combo = ttk.Combobox(options_section, textvariable=subtitles_var, values=subtitles_options, width=25, state="readonly")
 subtitles_combo.pack(fill="x")
-ttk.Label(options_section, text="'auto-all' downloads auto-generated subs in all available languages", font=("TkDefaultFont", 8, "italic")).pack(anchor="w", pady=(2, 0))
+ttk.Label(options_section, text="'auto-all' downloads auto-generated subs in all available languages. Selected subtitles are downloaded and embedded when possible.", font=("TkDefaultFont", 8, "italic")).pack(anchor="w", pady=(2, 0))
 
 # ===== Output Folder Section =====
 output_section = ttk.LabelFrame(main_frame, text="Save Location", padding=12)
